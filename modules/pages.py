@@ -13,6 +13,32 @@ from modules.analysis_service import (
 from modules.data_repository import DB_PATH, import_to_db, load_table, read_excel
 from modules.ui_components import multiselect_with_all
 
+SUBPAGES = ["二返分布统计", "产品问题统计", "二返趋势统计"]
+
+
+def ensure_state_in_options(key: str, options: list[str]) -> None:
+    if not options:
+        return
+    if key not in st.session_state or st.session_state[key] not in options:
+        st.session_state[key] = options[0]
+
+
+def get_clicked_product_from_event(event: dict | None) -> str | None:
+    if not isinstance(event, dict):
+        return None
+    points = event.get("selection", {}).get("points", [])
+    if not points:
+        return None
+    return points[0].get("label")
+
+
+def sync_distribution_to_trend(clicked_product: str, start_date, end_date, top_n: int) -> None:
+    st.session_state["analysis_subpage"] = "产品问题统计"
+    st.session_state["t2_product"] = clicked_product
+    st.session_state["t2_start"] = start_date
+    st.session_state["t2_end"] = end_date
+    st.session_state["t2_top_n"] = int(top_n)
+
 
 def render_data_import_page() -> None:
     st.header("数据导入")
@@ -75,29 +101,42 @@ def render_analysis_page() -> None:
     max_dt = valid_dates.max().date()
 
     fault_last_col = col_map["fault_code_last_col"]
-    tabs = st.tabs(["二返分布统计", "产品问题统计", "二返趋势统计"])
+    if "analysis_subpage" not in st.session_state:
+        st.session_state["analysis_subpage"] = "二返分布统计"
 
-    with tabs[0]:
+    subpage = st.radio(
+        "分析子页",
+        SUBPAGES,
+        horizontal=True,
+        key="analysis_subpage",
+        label_visibility="collapsed",
+    )
+
+    if subpage == "二返分布统计":
         st.subheader("二返分布统计")
-        a1, a2, a3 = st.columns(3)
+        st.markdown('<div class="bi-filter-card">', unsafe_allow_html=True)
+        st.markdown('<div class="bi-filter-title">筛选条件</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="bi-filter-subtitle">数据范围：{min_dt} ~ {max_dt}</div>',
+            unsafe_allow_html=True,
+        )
+
+        a1, a2, a3, a4 = st.columns([1.8, 1.2, 1.2, 0.8])
         with a1:
             service_options = sorted(df[service_col].dropna().astype(str).unique().tolist())
             selected_services = multiselect_with_all("服务商", service_options, "t1_svc")
         with a2:
-            t1_range = st.date_input(
-                "服务结束时间区间",
-                value=(min_dt, max_dt),
-                min_value=min_dt,
-                max_value=max_dt,
-                key="t1_date_range",
-            )
+            t1_start = st.date_input("开始日期", value=min_dt, key="t1_start")
         with a3:
+            t1_end = st.date_input("结束日期", value=max_dt, key="t1_end")
+        with a4:
             top_n_t1 = st.number_input("产品系列 Top N", min_value=1, max_value=50, value=10, step=1, key="t1_top_n")
 
-        if isinstance(t1_range, tuple) and len(t1_range) == 2:
-            t1_start, t1_end = t1_range
-        else:
-            t1_start = t1_end = min_dt
+        if t1_start > t1_end:
+            st.warning("开始日期不能晚于结束日期，已自动交换。")
+            t1_start, t1_end = t1_end, t1_start
+
+        st.markdown("</div>", unsafe_allow_html=True)
 
         if selected_services:
             t1_df = filter_by_service_and_time(
@@ -114,32 +153,45 @@ def render_analysis_page() -> None:
                 t1_pie = pie_counts(t1_df, product_col, top_n_t1, "产品系列")
                 fig = px.pie(t1_pie, names="产品系列", values="次数", hole=0.35, title="产品系列分布")
                 fig.update_traces(textposition="inside", textinfo="percent+label")
-                st.plotly_chart(fig, use_container_width=True)
+                fig.update_layout(clickmode="event+select")
+                event = st.plotly_chart(
+                    fig,
+                    use_container_width=True,
+                    key="t1_product_pie",
+                    on_select="rerun",
+                    selection_mode=("points",),
+                )
+                clicked_product = get_clicked_product_from_event(event)
+                if clicked_product:
+                    sync_distribution_to_trend(clicked_product, t1_start, t1_end, top_n_t1)
+                    st.rerun()
                 st.dataframe(t1_pie, use_container_width=True)
         else:
             st.info("请至少选择一个服务商。")
 
-    with tabs[1]:
+    elif subpage == "产品问题统计":
         st.subheader("产品问题统计")
-        b1, b2, b3 = st.columns(3)
+        st.markdown('<div class="bi-filter-card">', unsafe_allow_html=True)
+        st.markdown('<div class="bi-filter-title">筛选条件</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="bi-filter-subtitle">数据范围：{min_dt} ~ {max_dt}</div>',
+            unsafe_allow_html=True,
+        )
+        b1, b2, b3, b4 = st.columns([1.8, 1.2, 1.2, 0.8])
+        product_options = sorted(df[product_col].dropna().astype(str).unique().tolist())
+        ensure_state_in_options("t2_product", product_options)
         with b1:
-            product_options = sorted(df[product_col].dropna().astype(str).unique().tolist())
             selected_product = st.selectbox("产品系列（单选）", product_options, key="t2_product")
         with b2:
-            t2_range = st.date_input(
-                "服务结束时间区间",
-                value=(min_dt, max_dt),
-                min_value=min_dt,
-                max_value=max_dt,
-                key="t2_date_range",
-            )
+            t2_start = st.date_input("开始日期", value=min_dt, key="t2_start")
         with b3:
+            t2_end = st.date_input("结束日期", value=max_dt, key="t2_end")
+        with b4:
             top_n_t2 = st.number_input("错误码 Top N", min_value=1, max_value=50, value=10, step=1, key="t2_top_n")
-
-        if isinstance(t2_range, tuple) and len(t2_range) == 2:
-            t2_start, t2_end = t2_range
-        else:
-            t2_start = t2_end = min_dt
+        if t2_start > t2_end:
+            st.warning("开始日期不能晚于结束日期，已自动交换。")
+            t2_start, t2_end = t2_end, t2_start
+        st.markdown("</div>", unsafe_allow_html=True)
 
         t2_df = filter_by_product_and_time(
             df=df,
@@ -166,28 +218,32 @@ def render_analysis_page() -> None:
                 st.plotly_chart(fig_last, use_container_width=True)
                 st.dataframe(last_pie, use_container_width=True)
 
-    with tabs[2]:
+    elif subpage == "二返趋势统计":
         st.subheader("二返趋势统计")
-        d1, d2, d3 = st.columns(3)
+        st.markdown('<div class="bi-filter-card">', unsafe_allow_html=True)
+        st.markdown('<div class="bi-filter-title">筛选条件</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="bi-filter-subtitle">数据范围：{min_dt} ~ {max_dt}</div>',
+            unsafe_allow_html=True,
+        )
+        product_options = sorted(df[product_col].dropna().astype(str).unique().tolist())
+        last_fault_options = sorted(df[fault_last_col].dropna().astype(str).unique().tolist())
+        ensure_state_in_options("t3_product", product_options)
+        ensure_state_in_options("t3_last_fault", last_fault_options)
+
+        d1, d2, d3, d4 = st.columns([1.6, 1.6, 1.1, 1.1])
         with d1:
-            product_options = sorted(df[product_col].dropna().astype(str).unique().tolist())
             selected_product_t3 = st.selectbox("产品系列", product_options, key="t3_product")
         with d2:
-            last_fault_options = sorted(df[fault_last_col].dropna().astype(str).unique().tolist())
             selected_last_fault = st.selectbox("错误码（上次）", last_fault_options, key="t3_last_fault")
         with d3:
-            t3_range = st.date_input(
-                "服务结束时间区间",
-                value=(min_dt, max_dt),
-                min_value=min_dt,
-                max_value=max_dt,
-                key="t3_date_range",
-            )
-
-        if isinstance(t3_range, tuple) and len(t3_range) == 2:
-            t3_start, t3_end = t3_range
-        else:
-            t3_start = t3_end = min_dt
+            t3_start = st.date_input("开始日期", value=min_dt, key="t3_start")
+        with d4:
+            t3_end = st.date_input("结束日期", value=max_dt, key="t3_end")
+        if t3_start > t3_end:
+            st.warning("开始日期不能晚于结束日期，已自动交换。")
+            t3_start, t3_end = t3_end, t3_start
+        st.markdown("</div>", unsafe_allow_html=True)
 
         trend_df = trend_by_last_fault(
             df=df,
