@@ -18,7 +18,46 @@ def apply_custom_style() -> None:
         .menu-title {
             font-weight: 700;
             font-size: 20px;
-            margin-bottom: 8px;
+            margin-bottom: 10px;
+            letter-spacing: 0.2px;
+        }
+        section[data-testid="stSidebar"] {
+            background: linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%);
+        }
+        section[data-testid="stSidebar"] .stRadio > label {
+            font-size: 13px;
+            color: #64748b;
+            margin-bottom: 6px;
+        }
+        section[data-testid="stSidebar"] div[role="radiogroup"] label {
+            border: 1px solid #dbe5ff;
+            border-radius: 10px;
+            padding: 6px 8px;
+            margin-bottom: 6px;
+            background: #ffffff;
+            transition: all 0.2s ease;
+        }
+        section[data-testid="stSidebar"] div[role="radiogroup"] label:hover {
+            border-color: #93c5fd;
+            background: #f8fbff;
+        }
+        .import-entry-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #475569;
+            margin: 10px 0 6px 0;
+        }
+        section[data-testid="stSidebar"] .stButton button {
+            border-radius: 10px;
+            border: 1px solid #bfdbfe;
+            background: #eff6ff;
+            color: #1e3a8a;
+            font-weight: 600;
+        }
+        section[data-testid="stSidebar"] .stButton button:hover {
+            border-color: #60a5fa;
+            background: #dbeafe;
+            color: #1e40af;
         }
         .bi-filter-card {
             background: #ffffff;

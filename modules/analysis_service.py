@@ -96,14 +96,14 @@ def filter_by_product_and_time(
     df: pd.DataFrame,
     parsed_dates: pd.Series,
     product_series_col: str,
-    selected_product: str,
+    selected_products: list[str],
     start_date,
     end_date,
 ) -> pd.DataFrame:
     work = df.copy()
     work["_parsed_date"] = parsed_dates
     mask = (
-        (work[product_series_col].astype(str) == selected_product)
+        work[product_series_col].astype(str).isin(selected_products)
         & (work["_parsed_date"].dt.date >= start_date)
         & (work["_parsed_date"].dt.date <= end_date)
     )
@@ -126,7 +126,7 @@ def trend_by_last_fault(
     df: pd.DataFrame,
     parsed_dates: pd.Series,
     product_series_col: str,
-    selected_product: str,
+    selected_products: list[str],
     fault_code_last_col: str,
     selected_last_fault: str,
     start_date,
@@ -135,7 +135,7 @@ def trend_by_last_fault(
     work = df.copy()
     work["_parsed_date"] = parsed_dates
     mask = (
-        (work[product_series_col].astype(str) == selected_product)
+        work[product_series_col].astype(str).isin(selected_products)
         & (work[fault_code_last_col].astype(str) == selected_last_fault)
         & (work["_parsed_date"].dt.date >= start_date)
         & (work["_parsed_date"].dt.date <= end_date)
