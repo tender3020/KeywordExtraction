@@ -5,9 +5,48 @@ def apply_custom_style() -> None:
     st.markdown(
         """
         <style>
+        :root {
+            --app-primary: #2563eb;
+            --app-primary-soft: #dbeafe;
+            --app-bg: #f8fafc;
+            --app-surface: #ffffff;
+            --app-border: #e5e7eb;
+            --app-text-main: #0f172a;
+            --app-text-sub: #64748b;
+            --app-radius: 12px;
+        }
         .block-container {
-            padding-top: 1.5rem;
+            padding-top: 1.2rem;
             padding-bottom: 2rem;
+        }
+        .app-shell-top {
+            border: 1px solid var(--app-border);
+            background: linear-gradient(120deg, #ffffff 0%, #f8fbff 100%);
+            border-radius: 14px;
+            padding: 12px 14px;
+            margin-bottom: 14px;
+        }
+        .app-shell-title {
+            margin: 0;
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--app-text-main);
+        }
+        .app-shell-subtitle {
+            margin: 4px 0 0 0;
+            color: var(--app-text-sub);
+            font-size: 13px;
+        }
+        .app-page-title {
+            margin: 0;
+            font-size: 30px;
+            font-weight: 800;
+            color: var(--app-text-main);
+        }
+        .app-page-subtitle {
+            margin: 5px 0 12px 0;
+            color: var(--app-text-sub);
+            font-size: 13px;
         }
         .stMetric {
             background: #f8fafc;
@@ -60,8 +99,8 @@ def apply_custom_style() -> None:
             color: #1e40af;
         }
         .bi-filter-card {
-            background: #ffffff;
-            border: 1px solid #e5e7eb;
+            background: var(--app-surface);
+            border: 1px solid var(--app-border);
             border-radius: 14px;
             padding: 14px 16px 8px 16px;
             margin-bottom: 14px;
@@ -77,10 +116,49 @@ def apply_custom_style() -> None:
             font-size: 12px;
             margin-bottom: 10px;
         }
+        .stButton button[kind="secondary"] {
+            border-color: #cbd5e1;
+            background: #f8fafc;
+            color: #1e293b;
+        }
+        .stButton button[kind="secondary"]:hover {
+            border-color: #93c5fd;
+            background: #eff6ff;
+            color: #1e3a8a;
+        }
+        /* Keep theme switch menu, hide deploy entry/button */
+        button[data-testid="stBaseButton-headerNoPadding"][title="Deploy"],
+        a[data-testid="stHeaderActionButton"][aria-label*="Deploy"],
+        [data-testid="stToolbar"] button[title="Deploy"] {
+            display: none !important;
+        }
+        [data-testid="stMainMenu"] small {
+            display: none !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
     )
+
+
+def render_page_header(title: str, subtitle: str) -> None:
+    st.markdown(
+        f"""
+        <h1 class="app-page-title">{title}</h1>
+        <div class="app-page-subtitle">{subtitle}</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def render_filter_card_header(title: str, subtitle: str) -> None:
+    st.markdown('<div class="bi-filter-card">', unsafe_allow_html=True)
+    st.markdown(f'<div class="bi-filter-title">{title}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="bi-filter-subtitle">{subtitle}</div>', unsafe_allow_html=True)
+
+
+def close_filter_card() -> None:
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def multiselect_with_all(label: str, options: list[str], key_prefix: str) -> list[str]:

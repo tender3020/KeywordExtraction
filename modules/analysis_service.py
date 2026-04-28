@@ -122,6 +122,44 @@ def pie_counts(df: pd.DataFrame, value_col: str, top_n: int, label_name: str) ->
     )
 
 
+def sankey_pair_counts(
+    df: pd.DataFrame,
+    source_col: str,
+    target_col: str,
+    top_n: int | None,
+    source_label: str,
+    target_label: str,
+) -> pd.DataFrame:
+    work = df[[source_col, target_col]].copy()
+    work[source_col] = work[source_col].fillna("空值").astype(str).str.strip()
+    work[target_col] = work[target_col].fillna("空值").astype(str).str.strip()
+    work[source_col] = work[source_col].replace("", "空值")
+    work[target_col] = work[target_col].replace("", "空值")
+
+    if top_n is None or int(top_n) <= 0:
+        source_top = work[source_col].value_counts().index.tolist()
+        target_top = work[target_col].value_counts().index.tolist()
+    else:
+        source_top = work[source_col].value_counts().head(int(top_n)).index.tolist()
+        target_top = work[target_col].value_counts().head(int(top_n)).index.tolist()
+
+    work["source_bucket"] = work[source_col].where(work[source_col].isin(source_top), "其他")
+    work["target_bucket"] = work[target_col].where(work[target_col].isin(target_top), "其他")
+
+    return (
+        work.groupby(["source_bucket", "target_bucket"], as_index=False)
+        .size()
+        .rename(
+            columns={
+                "source_bucket": source_label,
+                "target_bucket": target_label,
+                "size": "次数",
+            }
+        )
+        .sort_values("次数", ascending=False)
+    )
+
+
 def trend_by_last_fault(
     df: pd.DataFrame,
     parsed_dates: pd.Series,

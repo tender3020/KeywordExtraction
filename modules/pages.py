@@ -1,5 +1,6 @@
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 from modules.analysis_service import (
@@ -9,6 +10,7 @@ from modules.analysis_service import (
     parse_dates,
     pie_counts,
     pick_col,
+    sankey_pair_counts,
     trend_by_last_fault,
 )
 from modules.data_repository import (
@@ -21,7 +23,7 @@ from modules.data_repository import (
     read_excel,
     update_record,
 )
-from modules.ui_components import multiselect_with_all
+from modules.ui_components import close_filter_card, multiselect_with_all, render_filter_card_header, render_page_header
 
 SUBPAGES = ["二返分布统计", "产品问题统计", "二返趋势统计"]
 
@@ -108,8 +110,7 @@ def sync_distribution_to_trend(clicked_product: str, start_date, end_date, top_n
 
 
 def render_data_import_page() -> None:
-    st.header("数据导入")
-    st.caption("上传 Excel，并把指定工作表数据写入数据库。")
+    render_page_header("数据导入", "上传 Excel 并写入数据库，支持导入前自动清洗无效工单号。")
 
     uploaded_file = st.file_uploader("选择 Excel 文件", type=["xlsx", "xls"], key="import_uploader")
     if uploaded_file is not None:
@@ -137,13 +138,13 @@ def render_data_import_page() -> None:
                     mask = invalid_workorder_mask(df[wo_col])
                     dropped = int(mask.sum())
                     df = df.loc[~mask].copy()
-                total_count = import_to_db(df)
+                inserted_count, total_count = import_to_db(df)
                 if dropped > 0:
                     st.success(
-                        f"导入成功：新增 {len(df)} 行，已自动剔除 {dropped} 行无效工单号，数据库当前共 {total_count} 行。"
+                        f"导入成功：新增 {inserted_count} 行，已自动剔除 {dropped} 行无效工单号，数据库当前共 {total_count} 行。"
                     )
                 else:
-                    st.success(f"导入成功：新增 {len(df)} 行，数据库当前共 {total_count} 行。")
+                    st.success(f"导入成功：新增 {inserted_count} 行，数据库当前共 {total_count} 行。")
             except Exception as exc:
                 st.error(f"导入失败：{exc}")
 
@@ -162,8 +163,7 @@ def _clean_text(v) -> str:
 
 
 def render_data_management_page() -> None:
-    st.header("二返数据管理")
-    st.caption("支持二返数据的查询、手动新增、编辑和删除。")
+    render_page_header("二返数据管理", "支持查询、手动新增、编辑和删除，适合日常数据维护。")
 
     if not DB_PATH.exists():
         st.info("数据库不存在，请先到“数据导入”栏目导入 Excel。")
@@ -230,7 +230,7 @@ def render_data_management_page() -> None:
     view_df = view_df.head(limit)
 
     st.subheader("数据列表")
-    st.dataframe(view_df[["_rowid"] + display_cols] if display_cols else view_df, use_container_width=True, hide_index=True)
+    st.dataframe(view_df[["_rowid"] + display_cols] if display_cols else view_df, width="stretch", hide_index=True)
     p1, p2 = st.columns([5, 3])
     with p2:
         st.markdown(
@@ -331,8 +331,7 @@ def render_data_management_page() -> None:
 
 
 def render_analysis_page() -> None:
-    st.header("二返数据分析")
-    st.caption("分布统计、问题统计、趋势统计")
+    render_page_header("二返数据分析", "分布统计、问题统计、趋势统计")
 
     if not DB_PATH.exists():
         st.info("数据库不存在，请先到“数据导入”栏目导入 Excel。")
@@ -388,12 +387,7 @@ def render_analysis_page() -> None:
 
     if subpage == "二返分布统计":
         st.subheader("二返分布统计")
-        st.markdown('<div class="bi-filter-card">', unsafe_allow_html=True)
-        st.markdown('<div class="bi-filter-title">筛选条件</div>', unsafe_allow_html=True)
-        st.markdown(
-            f'<div class="bi-filter-subtitle">数据范围：{min_dt} ~ {max_dt}</div>',
-            unsafe_allow_html=True,
-        )
+        render_filter_card_header("筛选条件", f"数据范围：{min_dt} ~ {max_dt}")
 
         a1, a2, a3, a4, a5, a6 = st.columns([1.0, 1.6, 1.2, 1.0, 1.0, 0.7])
         with a1:
@@ -409,7 +403,7 @@ def render_analysis_page() -> None:
             selected_services = multiselect_with_all("服务商", service_options, "t1_svc")
         with a3:
             selected_customer_resp = st.multiselect(
-                "是否客责任",
+                "是否客责",
                 options=customer_resp_options,
                 key="t1_customer_resp_filter",
                 placeholder="全部",
@@ -426,7 +420,7 @@ def render_analysis_page() -> None:
             st.warning("开始日期不能晚于结束日期，已自动交换。")
             t1_start, t1_end = t1_end, t1_start
 
-        st.markdown("</div>", unsafe_allow_html=True)
+        close_filter_card()
 
         if selected_services:
             t1_df = filter_by_service_and_time(
@@ -450,7 +444,7 @@ def render_analysis_page() -> None:
                 fig.update_layout(clickmode="event+select")
                 event = st.plotly_chart(
                     fig,
-                    use_container_width=True,
+                    width="stretch",
                     key="t1_product_pie",
                     on_select="rerun",
                     selection_mode=("points",),
@@ -459,18 +453,13 @@ def render_analysis_page() -> None:
                 if clicked_product:
                     sync_distribution_to_trend(clicked_product, t1_start, t1_end, top_n_t1)
                     st.rerun()
-                st.dataframe(t1_pie, use_container_width=True)
+                st.dataframe(t1_pie, width="stretch")
         else:
             st.info("请至少选择一个服务商。")
 
     elif subpage == "产品问题统计":
         st.subheader("产品问题统计")
-        st.markdown('<div class="bi-filter-card">', unsafe_allow_html=True)
-        st.markdown('<div class="bi-filter-title">筛选条件</div>', unsafe_allow_html=True)
-        st.markdown(
-            f'<div class="bi-filter-subtitle">数据范围：{min_dt} ~ {max_dt}</div>',
-            unsafe_allow_html=True,
-        )
+        render_filter_card_header("筛选条件", f"数据范围：{min_dt} ~ {max_dt}")
         b1, b2, b3, b4, b5, b6 = st.columns([1.0, 1.5, 1.2, 1.0, 1.0, 0.7])
         product_options = sorted(df[product_col].dropna().astype(str).unique().tolist())
         with b1:
@@ -503,7 +492,7 @@ def render_analysis_page() -> None:
         if t2_start > t2_end:
             st.warning("开始日期不能晚于结束日期，已自动交换。")
             t2_start, t2_end = t2_end, t2_start
-        st.markdown("</div>", unsafe_allow_html=True)
+        close_filter_card()
 
         t2_df = filter_by_product_and_time(
             df=df,
@@ -520,28 +509,115 @@ def render_analysis_page() -> None:
         if t2_df.empty:
             st.warning("当前条件下无数据。")
         else:
+            cur_unique_count = t2_df[fault_col].fillna("空值").astype(str).str.strip().replace("", "空值").nunique()
+            last_unique_count = (
+                t2_df[fault_last_col].fillna("空值").astype(str).str.strip().replace("", "空值").nunique()
+            )
+            if int(top_n_t2) > cur_unique_count or int(top_n_t2) > last_unique_count:
+                st.info(
+                    f"当前筛选条件下，错误码唯一值为 {cur_unique_count} 个，错误码（上次）唯一值为 {last_unique_count} 个；"
+                    f"Top N={int(top_n_t2)} 时会按实际唯一值数量展示，超出 Top 的会在桑基图中归纳到“其他”。"
+                )
+
             c1, c2 = st.columns(2)
             with c1:
                 cur_pie = pie_counts(t2_df, fault_col, top_n_t2, "错误码")
                 fig_cur = px.pie(cur_pie, names="错误码", values="次数", hole=0.35, title="错误码分布")
                 fig_cur.update_traces(textposition="inside", textinfo="percent+label")
-                st.plotly_chart(fig_cur, use_container_width=True)
-                st.dataframe(cur_pie, use_container_width=True)
+                st.plotly_chart(fig_cur, width="stretch")
+                st.dataframe(cur_pie, width="stretch")
             with c2:
                 last_pie = pie_counts(t2_df, fault_last_col, top_n_t2, "错误码（上次）")
                 fig_last = px.pie(last_pie, names="错误码（上次）", values="次数", hole=0.35, title="错误码（上次）分布")
                 fig_last.update_traces(textposition="inside", textinfo="percent+label")
-                st.plotly_chart(fig_last, use_container_width=True)
-                st.dataframe(last_pie, use_container_width=True)
+                st.plotly_chart(fig_last, width="stretch")
+                st.dataframe(last_pie, width="stretch")
+
+            st.subheader("错误码（上次）与错误码关联关系")
+            sankey_df = sankey_pair_counts(
+                df=t2_df,
+                source_col=fault_last_col,
+                target_col=fault_col,
+                top_n=int(top_n_t2),
+                source_label="错误码（上次）",
+                target_label="错误码",
+            )
+            if sankey_df.empty:
+                st.info("当前条件下无可用的桑基图数据。")
+            else:
+                source_order = (
+                    sankey_df.groupby("错误码（上次）", as_index=False)["次数"]
+                    .sum()
+                    .sort_values("次数", ascending=False)["错误码（上次）"]
+                    .tolist()
+                )
+                target_order = (
+                    sankey_df.groupby("错误码", as_index=False)["次数"]
+                    .sum()
+                    .sort_values("次数", ascending=False)["错误码"]
+                    .tolist()
+                )
+
+                def _move_other_last(items: list[str]) -> list[str]:
+                    if "其他" in items:
+                        return [v for v in items if v != "其他"] + ["其他"]
+                    return items
+
+                source_order = _move_other_last(source_order)
+                target_order = _move_other_last(target_order)
+
+                source_labels = [f"{name}" for name in source_order]
+                target_labels = [f"{name}" for name in target_order]
+                all_nodes = source_labels + target_labels
+                max_side_nodes = max(len(source_labels), len(target_labels), 1)
+                # 使用 Plotly snap 自动防重叠排布，避免手动 y 坐标在大流量节点下重叠。
+                if max_side_nodes <= 12:
+                    node_pad = 14
+                    node_thickness = 18
+                elif max_side_nodes <= 24:
+                    node_pad = 11
+                    node_thickness = 16
+                else:
+                    node_pad = 8
+                    node_thickness = 14
+                dynamic_height = int(min(2600, max(720, 260 + max_side_nodes * 44)))
+                top_margin = 56
+                bottom_margin = 20
+
+                source_index = {name: idx for idx, name in enumerate(source_order)}
+                target_index = {name: idx + len(source_order) for idx, name in enumerate(target_order)}
+
+                sankey_fig = go.Figure(
+                    data=[
+                        go.Sankey(
+                            arrangement="snap",
+                            node=dict(
+                                label=all_nodes,
+                                x=[0.02] * len(source_labels) + [0.98] * len(target_labels),
+                                pad=node_pad,
+                                thickness=node_thickness,
+                                line=dict(color="rgba(0,0,0,0.18)", width=0.7),
+                            ),
+                            link=dict(
+                                source=sankey_df["错误码（上次）"].map(source_index).tolist(),
+                                target=sankey_df["错误码"].map(target_index).tolist(),
+                                value=sankey_df["次数"].tolist(),
+                            ),
+                        )
+                    ]
+                )
+                sankey_fig.update_layout(
+                    title="错误码（上次） → 错误码 桑基图",
+                    font_size=12,
+                    height=dynamic_height,
+                    margin=dict(l=180, r=180, t=top_margin, b=bottom_margin),
+                )
+                st.plotly_chart(sankey_fig, width="stretch")
+                st.dataframe(sankey_df.head(30), width="stretch", hide_index=True)
 
     elif subpage == "二返趋势统计":
         st.subheader("二返趋势统计")
-        st.markdown('<div class="bi-filter-card">', unsafe_allow_html=True)
-        st.markdown('<div class="bi-filter-title">筛选条件</div>', unsafe_allow_html=True)
-        st.markdown(
-            f'<div class="bi-filter-subtitle">数据范围：{min_dt} ~ {max_dt}</div>',
-            unsafe_allow_html=True,
-        )
+        render_filter_card_header("筛选条件", f"数据范围：{min_dt} ~ {max_dt}")
         product_options = sorted(df[product_col].dropna().astype(str).unique().tolist())
         last_fault_options = sorted(df[fault_last_col].dropna().astype(str).unique().tolist())
 
@@ -569,7 +645,7 @@ def render_analysis_page() -> None:
         if t3_start > t3_end:
             st.warning("开始日期不能晚于结束日期，已自动交换。")
             t3_start, t3_end = t3_end, t3_start
-        st.markdown("</div>", unsafe_allow_html=True)
+        close_filter_card()
 
         t3_source_df = df
         if week_col and selected_weeks_t3:
@@ -595,5 +671,5 @@ def render_analysis_page() -> None:
                 markers=True,
                 title=f"{'、'.join(selected_products_t3)} / {selected_last_fault} 时间趋势",
             )
-            st.plotly_chart(line_fig, use_container_width=True)
-            st.dataframe(trend_df, use_container_width=True)
+            st.plotly_chart(line_fig, width="stretch")
+            st.dataframe(trend_df, width="stretch")
